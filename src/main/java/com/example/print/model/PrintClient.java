@@ -48,5 +48,7 @@ public class PrintClient {
 
     private String osInfo;
 
-    // 构造函数、getter和setter方法由Lombok自动生成
+    private Integer userId;             // 添加用户ID字段
+    private String username;            // 添加用户名字段
+
 }

@@ -143,7 +143,7 @@ public class OrderSyncService {
         printData.put("day_index", getDayOrderIndex(((Number) order.get("merchant_id")).intValue()));
 
         // 处理时间戳
-        Integer payTime = (Integer) order.get("pay_time");
+        Long payTime = (Long) order.get("pay_time");
         printData.put("orderTime", formatTimestamp(payTime));
 
         // 订单商品信息
@@ -178,7 +178,7 @@ public class OrderSyncService {
      * 获取订单商品信息
      */
     private List<Map<String, Object>> getOrderItems(int orderId) {
-        String sql = "SELECT * FROM tp_retail_bill_order_goods WHERE order_id = ?";
+        String sql = "SELECT * FROM tp_retail_bill_sell WHERE bill_id = ?";
         return jdbcTemplate.queryForList(sql, orderId);
     }
 
@@ -230,7 +230,7 @@ public class OrderSyncService {
     /**
      * 格式化Unix时间戳
      */
-    private String formatTimestamp(Integer timestamp) {
+    private String formatTimestamp(Long timestamp) {
         if (timestamp == null || timestamp == 0) {
             return "";
         }
