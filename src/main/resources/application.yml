@@ -1,0 +1,80 @@
+# application.yml
+
+server:
+  port: 23335
+  servlet:
+    context-path: /
+  tomcat:
+    max-threads: 200
+    connection-timeout: 5000
+
+spring:
+  application:
+    name: print-server
+
+  # 数据库配置
+  datasource:
+    url: jdbc:mysql://localhost:56658/mall
+    username: root
+    password: '@Zmvl3WoVRb9Vk$aFvnv_zAK'
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      idle-timeout: 30000
+      connection-timeout: 30000
+
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+  # Jackson配置
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    serialization:
+      write-dates-as-timestamps: false
+
+# 打印系统配置
+print:
+  order:
+    sync:
+      # 每批同步的订单数量
+      batch-size: 50
+      # 同步间隔（毫秒）
+      interval: 60000
+    # 最后同步的订单ID
+    last-sync-id: 0
+
+  # 任务配置
+  task:
+    # 最大重试次数
+    max-retry: 3
+    # 卡住任务检测间隔（毫秒）
+    stuck-check-interval: 600000
+    # 任务过期时间（分钟）
+    expire-minutes: 30
+
+  # 客户端配置
+  client:
+    # 心跳超时时间（分钟）
+    heartbeat-timeout: 2
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.example.printserver: DEBUG
+    org.hibernate.SQL: INFO
+  file:
+    name: logs/print-server.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 30
