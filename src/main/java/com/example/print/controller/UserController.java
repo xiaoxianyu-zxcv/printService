@@ -28,7 +28,6 @@ public class UserController {
         String password = loginData.get("password");
 
         try {
-            // 简单示例，实际应用中应使用加密密码
             String sql = "SELECT id, username, merchant_id, store_id FROM tp_user WHERE username = ? AND password = ?";
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, username, password);
 
