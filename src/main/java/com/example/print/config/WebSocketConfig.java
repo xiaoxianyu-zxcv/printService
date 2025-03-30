@@ -1,5 +1,6 @@
 package com.example.print.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -8,6 +9,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 
 @Configuration
 @EnableWebSocketMessageBroker
+@Slf4j
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
@@ -21,10 +23,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // 注册STOMP端点，客户端通过这个端点连接服务器
-        // 与现有客户端兼容
         registry.addEndpoint("/print-ws")
                 .setAllowedOriginPatterns("*")
-                .addInterceptors(new StoreWebSocketHandshakeInterceptor())  // 添加拦截器
-                .withSockJS();
+                .addInterceptors(new StoreWebSocketHandshakeInterceptor())
+                .withSockJS()
+                .setSessionCookieNeeded(false); // 添加此行避免可能的cookie问题
+
+        log.info("STOMP端点'/print-ws'已注册");
     }
 }

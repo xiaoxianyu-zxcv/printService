@@ -2,6 +2,7 @@ package com.example.print.service;
 
 import com.example.print.model.PrintTask;
 import com.example.print.model.PrintTaskStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -40,11 +41,17 @@ public class NotificationService {
      */
     public void broadcastToPrintersByStore(int storeId, PrintTask task) {
         try {
-            // 1. 向门店特定主题发送消息
-            messagingTemplate.convertAndSend("/topic/store/" + storeId + "/print-tasks", task);
+            String destination = "/topic/store/" + storeId + "/print-tasks";
+            log.info("准备广播打印任务到主题: {}", destination);
 
-            // 2. 记录日志
-            log.info("向门店 {} 广播打印任务: {}", storeId, task.getTaskId());
+            // 转为JSON先记录日志
+            ObjectMapper mapper = new ObjectMapper();
+            String jsonTask = mapper.writeValueAsString(task);
+            log.info("打印任务JSON: {}", jsonTask.substring(0, Math.min(200, jsonTask.length())) + "...");
+
+            // 发送消息
+            messagingTemplate.convertAndSend(destination, task);
+            log.info("已成功广播打印任务: {} 到主题: {}", task.getTaskId(), destination);
         } catch (Exception e) {
             log.error("广播打印任务失败: {}", task.getTaskId(), e);
         }
@@ -63,9 +70,9 @@ public class NotificationService {
             statusUpdate.put("orderNo", task.getOrderNo());
             statusUpdate.put("updateTime", task.getLastUpdateTime().toString());
 
-            // 1. 向商户特定主题发送更新
+            // 1. 向店铺特定主题发送更新
             messagingTemplate.convertAndSend(
-                    "/topic/merchant/" + task.getMerchantId() + "/print-status",
+                    "/topic/store/" + task.getStoreId() + "/print-status",
                     statusUpdate);
 
             // 2. 向通用主题发送更新

@@ -55,6 +55,8 @@ public class WebSocketController {
             // 基于store_id推送（优先）向商户的所有客户端广播这个任务
             if (task.getStoreId() != null) {
                 notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
+            } else {
+                log.warn("任务没有storeId，无法推送: {}", savedTask.getTaskId());
             }
             // 兼容现有逻辑
             //else if (task.getMerchantId() != null) {

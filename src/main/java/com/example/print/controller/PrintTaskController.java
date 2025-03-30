@@ -11,10 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/print-tasks")
@@ -40,6 +37,8 @@ public class PrintTaskController {
             // 基于store_id推送（优先）创建完成后，通过WebSocket通知客户端
             if (task.getStoreId() != null) {
                 notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
+            }else {
+                log.warn("任务没有storeId，无法推送: {}", savedTask.getTaskId());
             }
             // 兼容现有逻辑
             //else if (task.getMerchantId() != null) {
@@ -60,22 +59,46 @@ public class PrintTaskController {
      */
     @GetMapping("/pending")
     public ResponseEntity<List<PrintTask>> getPendingTasks(
-            @RequestParam(required = false) Integer merchantId,
-            @RequestParam(required = false) Integer storeId) {
+            @RequestParam(required = false) String merchantId,  // 修改为String类型
+            @RequestParam(required = false) String storeId) {   // 修改为String类型
 
         List<PrintTask> tasks;
 
         try {
-            // 按优先级：先按storeId查询，再按merchantId，最后全部
-            if (storeId != null) {
-                tasks = taskService.getPendingTasksByStore(storeId);
-                log.info("获取门店 {} 的待处理任务，共 {} 个", storeId, tasks.size());
-            } else if (merchantId != null) {
-                tasks = taskService.getPendingTasksByMerchant(merchantId);
-                log.info("获取商户 {} 的待处理任务，共 {} 个", merchantId, tasks.size());
+            // 记录原始请求参数
+            log.info("原始请求参数 - storeId: {}, merchantId: {}", storeId, merchantId);
+
+            // 转换storeId为Integer
+            Integer storeIdInt = null;
+            if (storeId != null && !storeId.isEmpty()) {
+                try {
+                    storeIdInt = Integer.parseInt(storeId);
+                    log.info("成功转换storeId: {} -> {}", storeId, storeIdInt);
+                } catch (NumberFormatException e) {
+                    log.error("storeId格式错误: {}", storeId);
+                }
+            }
+
+            // 转换merchantId为Integer
+            Integer merchantIdInt = null;
+            if (merchantId != null && !merchantId.isEmpty()) {
+                try {
+                    merchantIdInt = Integer.parseInt(merchantId);
+                } catch (NumberFormatException e) {
+                    log.error("merchantId格式错误: {}", merchantId);
+                }
+            }
+
+            // 按优先级：先按storeId查询
+            if (storeIdInt != null) {
+                tasks = taskService.getPendingTasksByStore(storeIdInt);
+                log.info("基于店铺ID({})过滤，获取到{}个待处理任务", storeIdInt, tasks.size());
+            } else if (merchantIdInt != null) {
+                tasks = taskService.getPendingTasksByMerchant(merchantIdInt);
+                log.info("基于商户ID过滤，获取到{}个待处理任务", tasks.size());
             } else {
-                tasks = taskService.getPendingTasks();
-                log.info("获取所有待处理任务，共 {} 个", tasks.size());
+                log.warn("请求未提供有效的storeId或merchantId，返回空列表");
+                return ResponseEntity.ok(Collections.emptyList());
             }
 
             return ResponseEntity.ok(tasks);
