@@ -52,7 +52,7 @@ public class OrderSyncService {
      * 定时同步已付款订单
      * 每分钟执行一次
      */
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedRate = 10000)
     @Transactional
     public void syncPaidOrders() {
         log.info("开始同步已付款订单，从ID: {} 开始", lastSyncOrderId);
@@ -83,8 +83,8 @@ public class OrderSyncService {
                         log.info("创建打印任务: {}, 订单号: {}", task.getTaskId(), task.getOrderNo());
 
                         // 向该商户的所有客户端广播打印任务
-                        int merchantId = ((Number) order.get("merchant_id")).intValue();
-                        notificationService.broadcastToPrintersByMerchant(merchantId, task);
+                        int storeId = ((Number) order.get("store_id")).intValue();
+                        notificationService.broadcastToPrintersByStore(storeId, task);
                     } catch (Exception e) {
                         log.error("处理订单 {} 失败", orderId, e);
                     }

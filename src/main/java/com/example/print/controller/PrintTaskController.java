@@ -42,9 +42,9 @@ public class PrintTaskController {
                 notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
             }
             // 兼容现有逻辑
-            else if (task.getMerchantId() != null) {
-                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
-            }
+            //else if (task.getMerchantId() != null) {
+            //    notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            //}
 
 
 
@@ -216,9 +216,9 @@ public class PrintTaskController {
                 notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
             }
             // 兼容现有逻辑
-            else if (task.getMerchantId() != null) {
-                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
-            }
+            //else if (task.getMerchantId() != null) {
+            //    notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            //}
 
 
             Map<String, Object> response = new HashMap<>();

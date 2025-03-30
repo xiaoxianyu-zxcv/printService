@@ -33,7 +33,7 @@ public class UserController {
 
             try {
                 // 第一步：只根据用户名查询用户
-                String sql = "SELECT id, username, merchant_id, store_id, password FROM tp_admin WHERE username = ?";
+                String sql = "SELECT id, `name` as username, merchant_id, store_id, PASSWORD FROM tp_retail_manager WHERE mobile = ?";
                 List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, username);
 
                 if (!results.isEmpty()) {

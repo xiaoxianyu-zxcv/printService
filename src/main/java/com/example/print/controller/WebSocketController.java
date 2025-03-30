@@ -57,9 +57,9 @@ public class WebSocketController {
                 notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
             }
             // 兼容现有逻辑
-            else if (task.getMerchantId() != null) {
-                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
-            }
+            //else if (task.getMerchantId() != null) {
+            //    notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            //}
 
             // 返回成功响应
             response.put("success", true);

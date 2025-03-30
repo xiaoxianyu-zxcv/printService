@@ -225,7 +225,7 @@ public class PrintTaskService {
                 taskRepository.save(task);
 
                 // 通知客户端重新打印
-                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), task);
+                notificationService.broadcastToPrintersByStore(task.getStoreId(), task);
                 log.info("重新分发卡住的任务: {}", task.getTaskId());
             }
         }
