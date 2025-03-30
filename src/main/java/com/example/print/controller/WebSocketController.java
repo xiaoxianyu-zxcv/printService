@@ -51,8 +51,15 @@ public class WebSocketController {
             // 创建并保存打印任务
             PrintTask savedTask = taskService.createTask(task);
 
-            // 向商户的所有客户端广播这个任务
-            notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+
+            // 基于store_id推送（优先）向商户的所有客户端广播这个任务
+            if (task.getStoreId() != null) {
+                notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
+            }
+            // 兼容现有逻辑
+            else if (task.getMerchantId() != null) {
+                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            }
 
             // 返回成功响应
             response.put("success", true);

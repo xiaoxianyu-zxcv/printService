@@ -24,6 +24,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 与现有客户端兼容
         registry.addEndpoint("/print-ws")
                 .setAllowedOriginPatterns("*")
+                .addInterceptors(new StoreWebSocketHandshakeInterceptor())  // 添加拦截器
                 .withSockJS();
     }
 }

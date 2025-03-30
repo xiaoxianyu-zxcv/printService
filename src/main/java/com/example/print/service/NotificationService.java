@@ -34,6 +34,23 @@ public class NotificationService {
         }
     }
 
+
+    /**
+     * 向特定门店的所有客户端广播打印任务
+     */
+    public void broadcastToPrintersByStore(int storeId, PrintTask task) {
+        try {
+            // 1. 向门店特定主题发送消息
+            messagingTemplate.convertAndSend("/topic/store/" + storeId + "/print-tasks", task);
+
+            // 2. 记录日志
+            log.info("向门店 {} 广播打印任务: {}", storeId, task.getTaskId());
+        } catch (Exception e) {
+            log.error("广播打印任务失败: {}", task.getTaskId(), e);
+        }
+    }
+
+
     /**
      * 任务状态更新通知
      */

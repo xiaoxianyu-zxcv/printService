@@ -37,8 +37,16 @@ public class PrintTaskController {
         try {
             PrintTask savedTask = taskService.createTask(task);
 
-            // 创建完成后，通过WebSocket通知客户端
-            notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            // 基于store_id推送（优先）创建完成后，通过WebSocket通知客户端
+            if (task.getStoreId() != null) {
+                notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
+            }
+            // 兼容现有逻辑
+            else if (task.getMerchantId() != null) {
+                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            }
+
+
 
             return ResponseEntity.ok(savedTask);
         } catch (Exception e) {
@@ -52,12 +60,17 @@ public class PrintTaskController {
      */
     @GetMapping("/pending")
     public ResponseEntity<List<PrintTask>> getPendingTasks(
-            @RequestParam(required = false) Integer merchantId) {
+            @RequestParam(required = false) Integer merchantId,
+            @RequestParam(required = false) Integer storeId) {
 
         List<PrintTask> tasks;
 
         try {
-            if (merchantId != null) {
+            // 按优先级：先按storeId查询，再按merchantId，最后全部
+            if (storeId != null) {
+                tasks = taskService.getPendingTasksByStore(storeId);
+                log.info("获取门店 {} 的待处理任务，共 {} 个", storeId, tasks.size());
+            } else if (merchantId != null) {
                 tasks = taskService.getPendingTasksByMerchant(merchantId);
                 log.info("获取商户 {} 的待处理任务，共 {} 个", merchantId, tasks.size());
             } else {
@@ -197,8 +210,16 @@ public class PrintTaskController {
 
             PrintTask savedTask = taskService.createTask(task);
 
-            // 广播任务
-            notificationService.broadcastToPrintersByMerchant(actualMerchantId, savedTask);
+
+            // 基于store_id推送（优先）
+            if (task.getStoreId() != null) {
+                notificationService.broadcastToPrintersByStore(task.getStoreId(), savedTask);
+            }
+            // 兼容现有逻辑
+            else if (task.getMerchantId() != null) {
+                notificationService.broadcastToPrintersByMerchant(Integer.parseInt(task.getMerchantId()), savedTask);
+            }
+
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);

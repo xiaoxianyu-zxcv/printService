@@ -85,6 +85,16 @@ public class PrintTaskService {
     }
 
     /**
+     * 获取店铺的待处理任务
+     */
+    public List<PrintTask> getPendingTasksByStore(int storeId) {
+        return taskRepository.findByStoreIdAndStatus(storeId, PrintTaskStatus.PENDING);
+    }
+
+
+
+
+    /**
      * 分页获取商户的任务历史
      */
     public Page<PrintTask> getTasksByMerchant(int merchantId, int page, int size) {
