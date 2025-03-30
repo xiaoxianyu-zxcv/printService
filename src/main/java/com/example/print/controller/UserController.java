@@ -28,7 +28,7 @@ public class UserController {
         String password = loginData.get("password");
 
         try {
-            String sql = "SELECT id, username, merchant_id, store_id FROM tp_user WHERE username = ? AND password = ?";
+            String sql = "SELECT id, username, merchant_id, store_id FROM tp_admin WHERE username = ? AND password = ?";
             List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, username, password);
 
             if (!results.isEmpty()) {
