@@ -41,17 +41,13 @@ public class NotificationService {
      */
     public void broadcastToPrintersByStore(int storeId, PrintTask task) {
         try {
-            String destination = "/topic/store/" + storeId + "/print-tasks";
-            log.info("准备广播打印任务到主题: {}", destination);
 
-            // 转为JSON先记录日志
-            ObjectMapper mapper = new ObjectMapper();
-            String jsonTask = mapper.writeValueAsString(task);
-            log.info("打印任务JSON: {}", jsonTask.substring(0, Math.min(200, jsonTask.length())) + "...");
+            log.info("准备广播打印任务到主题: {}", task);
+            // 1. 向门店特定主题发送消息
+            messagingTemplate.convertAndSend("/topic/store/" + storeId + "/print-tasks", task);
 
-            // 发送消息
-            messagingTemplate.convertAndSend(destination, task);
-            log.info("已成功广播打印任务: {} 到主题: {}", task.getTaskId(), destination);
+            // 2. 记录日志
+            log.info("向门店 {} 广播打印任务: {}", storeId, task.getTaskId());
         } catch (Exception e) {
             log.error("广播打印任务失败: {}", task.getTaskId(), e);
         }
