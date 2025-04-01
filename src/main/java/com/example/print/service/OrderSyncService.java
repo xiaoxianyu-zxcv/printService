@@ -180,13 +180,16 @@ public class OrderSyncService {
         printData.put("goods_price", goodsPrice);
         printData.put("pay_money", payMoney);
         printData.put("delivery_fee", deliveryFee);
+        printData.put("pay_real" , order.get("pay_real"));
+        printData.put("all_money" , order.get("all_money"));
+        printData.put("user_delivery_fee" , order.get("user_delivery_fee"));
 
         // 将订单商品信息转换为数组形式，包含详细信息
         List<Map<String, Object>> goodsArray = new ArrayList<>();
         for (Map<String, Object> item : orderItems) {
             Map<String, Object> goodsItem = new HashMap<>();
             goodsItem.put("goods_name", item.get("goods_name"));
-
+            goodsItem.put("goods_code", item.get("goods_code"));
             // 安全获取数量和价格
             double sellNum = getDoubleValue(item, "sell_num", 0.0);
             double sellPrice = getDoubleValue(item, "sell_price", 0.0);
