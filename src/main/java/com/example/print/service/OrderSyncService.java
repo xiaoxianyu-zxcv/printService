@@ -136,6 +136,21 @@ public class OrderSyncService {
         // 查询用户信息
         Map<String, Object> userInfo = getUserInfo(((Number) order.get("uid")).intValue());
 
+        // 查询线上订单信息（如果是线上订单）
+        Map<String, Object> onlineInfo = null;
+        // 安全地获取订单类型
+        int orderType = 1; // 默认为线上
+        if (order.get("type") instanceof Number) {
+            orderType = ((Number) order.get("type")).intValue();
+        } else if (order.get("type") instanceof Boolean) {
+            // 如果type是布尔类型，true转为1，false转为2
+            orderType = ((Boolean) order.get("type")) ? 1 : 2;
+        }
+
+        if (orderType == 1) {
+            onlineInfo = getOnlineOrderInfo(((Number) order.get("id")).intValue());
+        }
+
         // 构建打印数据
         Map<String, Object> printData = new HashMap<>();
         printData.put("orderNo", order.get("order_no"));
@@ -144,34 +159,109 @@ public class OrderSyncService {
 
         // 处理时间戳
         Long payTime = (Long) order.get("pay_time");
+        printData.put("payTime", payTime);
         printData.put("orderTime", formatTimestamp(payTime));
 
-        // 订单商品信息
-        printData.put("goods", formatOrderItems(orderItems));
+        // 订单类型信息 - 安全处理类型
+        printData.put("type", orderType); // 1线上 2线下
 
-        // 金额信息
-        printData.put("deliveryFee", order.get("delivery_fee"));
-        printData.put("totalPrice", order.get("goods_price"));
-        printData.put("actualPayment", order.get("pay_money"));
+        // 安全获取支付类型
+        int payType = 0;
+        if (order.get("pay_type") instanceof Number) {
+            payType = ((Number) order.get("pay_type")).intValue();
+        }
+        printData.put("pay_type", payType);
 
-        // 支付方式
-        printData.put("paymentMethod", getPaymentMethod(((Number) order.get("pay_type")).intValue()));
+        // 商品和金额信息 - 安全获取数值
+        double goodsPrice = getDoubleValue(order, "goods_price", 0.0);
+        double payMoney = getDoubleValue(order, "pay_money", 0.0);
+        double deliveryFee = getDoubleValue(order, "delivery_fee", 0.0);
 
-        // 配送状态
-        printData.put("delivery_status", getDeliveryStatus(((Number) order.get("status")).intValue()));
+        printData.put("goods_price", goodsPrice);
+        printData.put("pay_money", payMoney);
+        printData.put("delivery_fee", deliveryFee);
+
+        // 将订单商品信息转换为数组形式，包含详细信息
+        List<Map<String, Object>> goodsArray = new ArrayList<>();
+        for (Map<String, Object> item : orderItems) {
+            Map<String, Object> goodsItem = new HashMap<>();
+            goodsItem.put("goods_name", item.get("goods_name"));
+
+            // 安全获取数量和价格
+            double sellNum = getDoubleValue(item, "sell_num", 0.0);
+            double sellPrice = getDoubleValue(item, "sell_price", 0.0);
+
+            goodsItem.put("sell_num", (int)sellNum); // 销售数量转为整数
+            goodsItem.put("sell_price", sellPrice); // 销售单价
+            goodsItem.put("sell_subtotal", sellNum * sellPrice); // 计算小计
+
+            goodsArray.add(goodsItem);
+        }
+        printData.put("goodsItems", goodsArray); // 商品数组，包含详细信息
+
+        // 线上订单特有信息
+        if (onlineInfo != null) {
+            // 安全获取pickup_type
+            int pickupType = 0;
+            if (onlineInfo.get("pickup_type") instanceof Number) {
+                pickupType = ((Number) onlineInfo.get("pickup_type")).intValue();
+            }
+            printData.put("pickup_type", pickupType);
+
+            printData.put("user_name", onlineInfo.getOrDefault("user_name", ""));
+            printData.put("user_phone", onlineInfo.getOrDefault("user_phone", ""));
+            printData.put("user_address", onlineInfo.getOrDefault("user_address", ""));
+            printData.put("remark", onlineInfo.getOrDefault("remark", ""));
+        }
 
         // 用户信息
         if (userInfo != null) {
-            printData.put("customer", userInfo.get("nickname"));
-            printData.put("customerPhone", userInfo.get("mobile"));
-            printData.put("address", userInfo.get("address"));
+            printData.put("customer", userInfo.getOrDefault("nickname", ""));
+            printData.put("customerPhone", userInfo.getOrDefault("mobile", ""));
+            // 如果没有线上订单地址信息，则使用用户基本地址
+            if (!printData.containsKey("user_address") || printData.get("user_address") == null) {
+                printData.put("user_address", userInfo.getOrDefault("address", ""));
+            }
         } else {
             printData.put("customer", "未知用户");
             printData.put("customerPhone", "");
-            printData.put("address", "");
         }
 
         return objectMapper.writeValueAsString(printData);
+    }
+
+    /**
+     * 从Map中安全获取double值
+     */
+    private double getDoubleValue(Map<String, Object> map, String key, double defaultValue) {
+        if (!map.containsKey(key) || map.get(key) == null) {
+            return defaultValue;
+        }
+
+        Object value = map.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        } else if (value instanceof String) {
+            try {
+                return Double.parseDouble((String) value);
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        } else if (value instanceof Boolean) {
+            return ((Boolean) value) ? 1.0 : 0.0;
+        }
+
+        return defaultValue;
+    }
+
+
+    /**
+     * 获取线上订单信息
+     */
+    private Map<String, Object> getOnlineOrderInfo(int orderId) {
+        String sql = "SELECT * FROM tp_retail_bill_online WHERE bill_id = ?";
+        List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, orderId);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     /**

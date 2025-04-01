@@ -17,7 +17,7 @@ spring:
 
   # 数据库配置
   datasource:
-    url: jdbc:mysql://127.0.0.1:56658/mall
+    url: jdbc:mysql://121.62.28.55:56658/mall
     username: root
     password: '@Zmvl3WoVRb9Vk$aFvnv_zAK'
     driver-class-name: com.mysql.cj.jdbc.Driver

@@ -71,51 +71,6 @@ public class UserController {
     }
 
 
-    //@PostMapping("/login")
-    //public ResponseEntity<?> login(@RequestBody Map<String, String> loginData) {
-    //    String username = loginData.get("username");
-    //    String password = loginData.get("password");
-    //
-    //    log.info("收到登录请求: username={}", username);
-    //
-    //    try {
-    //        // 第一步：只根据用户名查询用户
-    //        String sql = "SELECT id, username, merchant_id, store_id, password FROM tp_admin WHERE username = ?";
-    //        List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, username);
-    //
-    //        if (!results.isEmpty()) {
-    //            Map<String, Object> user = results.get(0);
-    //            String storedPassword = (String) user.get("password");
-    //
-    //            // 加密输入的密码
-    //            String encryptedInputPassword = encryptPassword(password);
-    //            log.debug("加密后的输入密码: {}", encryptedInputPassword);
-    //            log.debug("数据库存储的密码: {}", storedPassword);
-    //
-    //            if (storedPassword.equals(encryptedInputPassword)) {
-    //                // 密码匹配，登录成功
-    //                Map<String, Object> response = new HashMap<>();
-    //                response.put("userId", user.get("id"));
-    //                response.put("username", user.get("username"));
-    //                response.put("merchantId", user.get("merchant_id"));
-    //                response.put("storeId", user.get("store_id"));
-    //
-    //                log.info("登录成功: userId={}", user.get("id"));
-    //                return ResponseEntity.ok(response);
-    //            } else {
-    //                // 密码不匹配
-    //                log.warn("登录失败: 密码不匹配");
-    //                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("用户名或密码错误");
-    //            }
-    //        } else {
-    //            log.warn("登录失败: 用户不存在");
-    //            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("用户名或密码错误");
-    //        }
-    //    } catch (Exception e) {
-    //        log.error("登录失败", e);
-    //        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("登录处理失败: " + e.getMessage());
-    //    }
-    //}
 
     /**
      * 实现与PHP相同的密码加密算法
