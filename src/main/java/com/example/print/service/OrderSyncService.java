@@ -136,6 +136,11 @@ public class OrderSyncService {
         // 查询用户信息
         Map<String, Object> userInfo = getUserInfo(((Number) order.get("uid")).intValue());
 
+
+        //查询店铺信息
+        Map<String, Object> storeInfo = getStoreInfo(((Number) order.get("store_id")).intValue(), ((Number) order.get("merchant_id")).intValue());
+
+
         // 查询线上订单信息（如果是线上订单）
         Map<String, Object> onlineInfo = null;
         // 安全地获取订单类型
@@ -153,8 +158,17 @@ public class OrderSyncService {
 
         // 构建打印数据
         Map<String, Object> printData = new HashMap<>();
+
+        //订单号
         printData.put("orderNo", order.get("order_no"));
-        printData.put("merchant", "指尖赤壁"); // 可从商户表中查询
+        //商家信息，目前只给名字
+        if (storeInfo != null) {
+            printData.put("merchant", storeInfo.getOrDefault("name","指尖赤壁"));
+        }else {
+            printData.put("merchant", "指尖赤壁");
+        }
+
+        //今日第几单
         printData.put("day_index", getDayOrderIndex(((Number) order.get("merchant_id")).intValue()));
 
         // 处理时间戳
@@ -208,6 +222,9 @@ public class OrderSyncService {
             int pickupType = 0;
             if (onlineInfo.get("pickup_type") instanceof Number) {
                 pickupType = ((Number) onlineInfo.get("pickup_type")).intValue();
+            } else if (onlineInfo.get("pickup_type") instanceof Boolean) {
+                // 布尔值 true 转为 1，false 转为 0
+                pickupType = ((Boolean) onlineInfo.get("pickup_type")) ? 1 : 0;
             }
             printData.put("pickup_type", pickupType);
 
@@ -215,7 +232,22 @@ public class OrderSyncService {
             printData.put("user_phone", onlineInfo.getOrDefault("user_phone", ""));
             printData.put("user_address", onlineInfo.getOrDefault("user_address", ""));
             printData.put("remark", onlineInfo.getOrDefault("remark", ""));
+
         }
+
+        //配送时间
+        Long selectTime = null;
+        if (onlineInfo != null) {
+            selectTime = onlineInfo.get("user_select_time") instanceof Integer ?
+                    ((Integer)onlineInfo.get("user_select_time")).longValue() :
+                    (Long)onlineInfo.get("user_select_time");
+        }
+        printData.put("delivery_time", formatTimestamp(selectTime));
+
+
+        //打包费
+        Double packFee = getDoubleValue(order, "pack_fee", 0.0);
+        printData.put("pack_fee", packFee);
 
         // 用户信息
         if (userInfo != null) {
@@ -281,6 +313,15 @@ public class OrderSyncService {
     private Map<String, Object> getUserInfo(int uid) {
         String sql = "SELECT * FROM tp_user WHERE id = ?";
         List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, uid);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    /**
+     * 获取店铺
+     */
+    private Map<String, Object> getStoreInfo(int storeID, int merchantId) {
+        String sql = "SELECT * FROM tp_retail_store WHERE id = ? AND merchant_id = ?";
+        List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, storeID, merchantId);
         return results.isEmpty() ? null : results.get(0);
     }
 
