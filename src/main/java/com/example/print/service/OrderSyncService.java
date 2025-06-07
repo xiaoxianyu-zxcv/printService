@@ -212,6 +212,17 @@ public class OrderSyncService {
             goodsItem.put("sell_price", sellPrice); // 销售单价
             goodsItem.put("sell_subtotal", sellNum * sellPrice); // 计算小计
 
+
+            // 新增：处理餐饮商品的规格信息
+            boolean isFood = Boolean.TRUE.equals(item.get("is_food"));
+            goodsItem.put("is_food", isFood);
+
+            if (isFood) {
+                // 格式化规格信息
+                String specText = formatSpecsText((List<Map<String, Object>>) item.get("specs"));
+                goodsItem.put("spec_text", specText);
+            }
+
             goodsArray.add(goodsItem);
         }
         printData.put("goodsItems", goodsArray); // 商品数组，包含详细信息
@@ -266,6 +277,32 @@ public class OrderSyncService {
     }
 
     /**
+     * 格式化规格信息为打印文本
+     * 将 [{group_name=调料, item_name=醋}, {group_name=份量, item_name=大份}]
+     * 转换为 "{醋，大份}"
+     */
+    private String formatSpecsText(List<Map<String, Object>> specs) {
+        if (specs == null || specs.isEmpty()) {
+            return "";
+        }
+
+        List<String> specItems = new ArrayList<>();
+        for (Map<String, Object> spec : specs) {
+            String itemName = (String) spec.get("item_name");
+            if (itemName != null && !itemName.trim().isEmpty()) {
+                specItems.add(itemName.trim());
+            }
+        }
+
+        if (specItems.isEmpty()) {
+            return "";
+        }
+
+        // 格式化为 {醋，大份} 的形式
+        return "{" + String.join("，", specItems) + "}";
+    }
+
+    /**
      * 从Map中安全获取double值
      */
     private double getDoubleValue(Map<String, Object> map, String key, double defaultValue) {
@@ -299,12 +336,82 @@ public class OrderSyncService {
         return results.isEmpty() ? null : results.get(0);
     }
 
+    ///**
+    // * 获取订单商品信息
+    // */
+    //private List<Map<String, Object>> getOrderItems(int orderId) {
+    //    String sql = "SELECT * FROM tp_retail_bill_sell WHERE bill_id = ?";
+    //    return jdbcTemplate.queryForList(sql, orderId);
+    //}
+
     /**
-     * 获取订单商品信息
+     * 获取订单商品信息（增强版：支持餐饮商品规格）
      */
     private List<Map<String, Object>> getOrderItems(int orderId) {
-        String sql = "SELECT * FROM tp_retail_bill_sell WHERE bill_id = ?";
-        return jdbcTemplate.queryForList(sql, orderId);
+        // 1. 查询订单商品基础信息，连表获取商品类型
+        String sql = "SELECT bs.*, rg.is_takeout, rg.is_package " +
+                "FROM tp_retail_bill_sell bs " +
+                "LEFT JOIN tp_retail_goods rg ON bs.goods_id = rg.id " +
+                "WHERE bs.bill_id = ?";
+
+        List<Map<String, Object>> orderItems = jdbcTemplate.queryForList(sql, orderId);
+
+        // 2. 为每个商品检查是否为餐饮商品，如果是则查询规格信息
+        for (Map<String, Object> item : orderItems) {
+            int isTakeout = getIntValue(item, "is_takeout", 0);
+            int isPackage = getIntValue(item, "is_package", 0);
+
+            // 判断是否为餐饮商品：is_takeout=1 且 is_package=0
+            if (isTakeout == 1 && isPackage == 0) {
+                // 安全获取goods_id
+                int goodsId = getIntValue(item, "goods_id", 0);
+                // 查询该商品的规格信息
+                List<Map<String, Object>> specInfo = getOrderItemSpecs(orderId, goodsId);
+                item.put("specs", specInfo); // 将规格信息添加到商品数据中
+                item.put("is_food", true);   // 标记为餐饮商品
+                log.info("11111111111餐饮商品: {}", item);
+            } else {
+                item.put("is_food", false);  // 标记为普通商品
+            }
+        }
+
+        return orderItems;
+    }
+
+    /**
+     * 查询订单商品的规格信息
+     */
+    private List<Map<String, Object>> getOrderItemSpecs(int orderId, int goodsId) {
+        String sql = "SELECT group_name, item_name " +
+                "FROM tp_retail_bill_order_item_spec " +
+                "WHERE order_id = ? AND goods_id = ? " +
+                "ORDER BY group_id";
+
+        return jdbcTemplate.queryForList(sql, orderId, goodsId);
+    }
+
+    /**
+     * 安全获取整数值的辅助方法
+     */
+    private int getIntValue(Map<String, Object> map, String key, int defaultValue) {
+        if (!map.containsKey(key) || map.get(key) == null) {
+            return defaultValue;
+        }
+
+        Object value = map.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        } else if (value instanceof String) {
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        } else if (value instanceof Boolean) {
+            return ((Boolean) value) ? 1 : 0;
+        }
+
+        return defaultValue;
     }
 
     /**
