@@ -239,6 +239,37 @@ public class OrderSyncService {
             }
             printData.put("pickup_type", pickupType);
 
+            // 新增：单据类型判断逻辑
+            String billType;
+            boolean showScheduleTime = false;
+
+            if (pickupType == 0) {
+                // 配送单逻辑
+                Integer sendType = null;
+                if (onlineInfo.get("send_type") instanceof Number) {
+                    sendType = ((Number) onlineInfo.get("send_type")).intValue();
+                }
+
+                if (sendType != null && sendType == 1) {
+                    billType = "预约单";
+                    showScheduleTime = true;
+                } else {
+                    billType = "配送单";
+                }
+            } else if (pickupType == 1) {
+                // 自提单逻辑
+                billType = "自提单";
+                showScheduleTime = true; // 自提单也显示自提时间
+            } else {
+                // 其他情况默认为配送单
+                billType = "配送单";
+            }
+
+            // 新增字段，不修改现有字段
+            printData.put("bill_type", billType);        // 新增：单据类型
+            printData.put("show_schedule_time", showScheduleTime);  // 新增：是否显示时间
+
+
             printData.put("user_name", onlineInfo.getOrDefault("user_name", ""));
             printData.put("user_phone", onlineInfo.getOrDefault("user_phone", ""));
             printData.put("user_address", onlineInfo.getOrDefault("user_address", ""));
@@ -327,12 +358,28 @@ public class OrderSyncService {
     }
 
 
+    ///**
+    // * 获取线上订单信息
+    // */
+    //private Map<String, Object> getOnlineOrderInfo(int orderId) {
+    //    String sql = "SELECT * FROM tp_retail_bill_online WHERE bill_id = ?";
+    //    List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, orderId);
+    //    return results.isEmpty() ? null : results.get(0);
+    //}
+
+
     /**
-     * 获取线上订单信息
+     * 获取线上订单信息（增强版：支持配送类型判断）
      */
     private Map<String, Object> getOnlineOrderInfo(int orderId) {
-        String sql = "SELECT * FROM tp_retail_bill_online WHERE bill_id = ?";
+        // 修改SQL：对配送单进行LEFT JOIN查询
+        String sql = "SELECT bo.*, do.send_type " +
+                "FROM tp_retail_bill_online bo " +
+                "LEFT JOIN tp_retail_delivery_order do ON bo.delivery_order_id = do.id " +
+                "WHERE bo.bill_id = ?";
+
         List<Map<String, Object>> results = jdbcTemplate.queryForList(sql, orderId);
+        log.info("2222222222: {}", results);
         return results.isEmpty() ? null : results.get(0);
     }
 
