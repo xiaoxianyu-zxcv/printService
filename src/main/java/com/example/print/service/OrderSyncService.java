@@ -15,6 +15,7 @@ import javax.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -48,6 +49,9 @@ public class OrderSyncService {
         log.info("初始化订单同步服务，上次同步的订单ID: {}", lastSyncOrderId);
     }
 
+    @Value("${print.order.sync.time-limit-hours:24}")
+    private int timeLimitHours; // 可配置的时间限制（小时）
+
     /**
      * 定时同步已付款订单
      * 每分钟执行一次
@@ -58,15 +62,22 @@ public class OrderSyncService {
         log.info("开始同步已付款订单，从ID: {} 开始", lastSyncOrderId);
 
         try {
-            // 查询新的已付款订单
+
+            // 计算时间限制的时间戳
+            long timeLimitTimestamp = System.currentTimeMillis() / 1000 - timeLimitHours * 60 * 60;
+
+
+            // 查询新的已付款订单（增加时间限制条件）
             String sql = "SELECT * FROM tp_retail_bill_order WHERE id > ? AND pay_state = 1 " +
+                    "AND pay_time > ? " +  // 添加时间限制
                     "ORDER BY id ASC LIMIT ?";
 
             List<Map<String, Object>> newOrders = jdbcTemplate.queryForList(
-                    sql, lastSyncOrderId, batchSize);
+                    sql, lastSyncOrderId, timeLimitTimestamp, batchSize);
+
 
             if (newOrders.isEmpty()) {
-                log.info("没有新的已付款订单");
+                log.info("没有新的已付款订单（{}小时内）", timeLimitHours);
                 return;
             }
 
@@ -163,8 +174,8 @@ public class OrderSyncService {
         printData.put("orderNo", order.get("order_no"));
         //商家信息，目前只给名字
         if (storeInfo != null) {
-            printData.put("merchant", storeInfo.getOrDefault("name","指尖赤壁"));
-        }else {
+            printData.put("merchant", storeInfo.getOrDefault("name", "指尖赤壁"));
+        } else {
             printData.put("merchant", "指尖赤壁");
         }
 
@@ -194,9 +205,9 @@ public class OrderSyncService {
         printData.put("goods_price", goodsPrice);
         printData.put("pay_money", payMoney);
         printData.put("delivery_fee", deliveryFee);
-        printData.put("pay_real" , order.get("pay_real"));
-        printData.put("all_money" , order.get("all_money"));
-        printData.put("user_delivery_fee" , order.get("user_delivery_fee"));
+        printData.put("pay_real", order.get("pay_real"));
+        printData.put("all_money", order.get("all_money"));
+        printData.put("user_delivery_fee", order.get("user_delivery_fee"));
 
         // 将订单商品信息转换为数组形式，包含详细信息
         List<Map<String, Object>> goodsArray = new ArrayList<>();
@@ -208,7 +219,7 @@ public class OrderSyncService {
             double sellNum = getDoubleValue(item, "sell_num", 0.0);
             double sellPrice = getDoubleValue(item, "sell_price", 0.0);
 
-            goodsItem.put("sell_num", (int)sellNum); // 销售数量转为整数
+            goodsItem.put("sell_num", (int) sellNum); // 销售数量转为整数
             goodsItem.put("sell_price", sellPrice); // 销售单价
             goodsItem.put("sell_subtotal", sellNum * sellPrice); // 计算小计
 
@@ -281,8 +292,8 @@ public class OrderSyncService {
         Long selectTime = null;
         if (onlineInfo != null) {
             selectTime = onlineInfo.get("user_select_time") instanceof Integer ?
-                    ((Integer)onlineInfo.get("user_select_time")).longValue() :
-                    (Long)onlineInfo.get("user_select_time");
+                    ((Integer) onlineInfo.get("user_select_time")).longValue() :
+                    (Long) onlineInfo.get("user_select_time");
         }
         printData.put("delivery_time", formatTimestamp(selectTime));
 
@@ -563,4 +574,268 @@ public class OrderSyncService {
                 return "未知状态";
         }
     }
+
+    /**
+     * 定时同步退款成功的订单（生成退货单）
+     * 每30秒执行一次
+     */
+    @Scheduled(fixedRate = 30000)
+    @Transactional
+    public void syncRefundOrders() {
+
+        log.info("开始同步退款成功的订单");
+        try {
+
+            // 计算时间限制的时间戳
+            long timeLimitTimestamp = System.currentTimeMillis() / 1000 - timeLimitHours * 60 * 60;
+
+            //查询退款成功，但为生成退货单的商品。
+            //refund_state = 2(退款成功) 且 scene_type = 2(退款订单)
+            String sql = "SELECT DISTINCT bs.bill_id, bo.* " +
+                    "FROM tp_retail_bill_sell bs " +
+                    "INNER JOIN tp_retail_bill_order bo ON bs.bill_id = bo.id " +
+                    "WHERE bs.refund_status = 2 AND bs.scene_type = 2 " +
+                    "AND bo.pay_time > ? " +
+                    "AND NOT EXISTS (" +
+                    "  SELECT 1 FROM print_tasks pt " +
+                    "  WHERE pt.order_id = bs.bill_id " +
+                    "  AND pt.content LIKE '%退货单%'" +
+                    ") " +
+                    "GROUP BY bs.bill_id " +
+                    "ORDER BY bo.id ASC " +
+                    "LIMIT ?";
+            List<Map<String, Object>> refundOrders = jdbcTemplate.queryForList(
+                    sql, timeLimitTimestamp, batchSize);
+            if (refundOrders.isEmpty()) {
+                log.info("没有新的退款成功订单需要打印（{}小时内）", timeLimitHours);
+                return;
+            }
+            log.info("发现 {} 个退款订单需要生成退货单（{}小时内）", refundOrders.size(), timeLimitHours);
+
+
+            for (Map<String, Object> order : refundOrders) {
+                int orderId = ((Number) order.get("id")).intValue();
+
+                try {
+                    // 创建退货单打印任务
+                    PrintTask task = createRefundPrintTask(order);
+                    log.info("创建退货单打印任务: {}, 订单号: {}", task.getTaskId(), task.getOrderNo());
+
+                    // 向该门店的所有客户端广播打印任务
+                    int storeId = ((Number) order.get("store_id")).intValue();
+                    notificationService.broadcastToPrintersByStore(storeId, task);
+
+                } catch (Exception e) {
+                    log.error("处理退款订单 {} 失败", orderId, e);
+                }
+            }
+        } catch (Exception e) {
+            log.error("同步退款订单失败", e);
+        }
+    }
+
+
+    /**
+     * 创建退货单打印任务
+     */
+    private PrintTask createRefundPrintTask(Map<String, Object> order) throws Exception {
+        // 生成退货单打印内容
+        String content = generateRefundPrintContent(order);
+
+        // 创建打印任务
+        PrintTask task = new PrintTask();
+        task.setTaskId(UUID.randomUUID().toString());
+        task.setOrderId(((Number) order.get("id")).intValue());
+        task.setOrderNo((String) order.get("order_no"));
+        task.setMerchantId(String.valueOf(((Number) order.get("merchant_id")).intValue()));
+        task.setStoreId(((Number) order.get("store_id")).intValue());
+        task.setContent(content);
+        task.setStatus(PrintTaskStatus.PENDING);
+        task.setCreateTime(LocalDateTime.now());
+        task.setLastUpdateTime(LocalDateTime.now());
+
+        // 保存打印任务
+        return printTaskService.createTask(task);
+    }
+
+
+    /**
+     * 生成退货单打印内容
+     */
+    private String generateRefundPrintContent(Map<String, Object> order) throws Exception {
+        int orderId = ((Number) order.get("id")).intValue();
+
+        //查询改订单下所有的退款成功的商品
+        String sql = "SELECT bs.*, rg.is_takeout, rg.is_package " +
+                "FROM tp_retail_bill_sell bs " +
+                "LEFT JOIN tp_retail_goods rg ON bs.goods_id = rg.id " +
+                "WHERE bs.bill_id = ? AND bs.refund_status = 2 AND bs.scene_type = 2";
+
+        List<Map<String, Object>> refundItems = jdbcTemplate.queryForList(sql, orderId);
+        if (refundItems.isEmpty()) {
+            throw new Exception("没有找到退款商品");
+        }
+
+        //查询店铺信息
+        Map<String, Object> storeInfo = getStoreInfo(((Number) order.get("store_id")).intValue(), ((Number) order.get("merchant_id")).intValue());
+
+        //构建退货单打印数据
+        HashMap<String, Object> printData = new HashMap<>();
+
+        //基本信息
+        printData.put("type", "refund");
+        printData.put("orderNo", order.get("order_no"));
+        printData.put("merchant", storeInfo != null ? storeInfo.getOrDefault("name", "指尖赤壁") : "指尖赤壁");
+
+        // 退款时间（使用当前时间）
+        printData.put("refundTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss")));
+
+        //原支付时间
+        Long payTime = (Long) order.get("pay_time");
+        printData.put("originalPayTime", formatTimestamp(payTime));
+
+
+        //处理退款商品信息
+        ArrayList<Map<String, Object>> refundGoodsArray = new ArrayList<>();
+        double totalRefundAmount = 0.0;
+        for (Map<String, Object> item : refundItems) {
+            HashMap<String, Object> goodsItem = new HashMap<>();
+
+            goodsItem.put("goods_name", item.get("goods_name"));
+            goodsItem.put("goods_code", item.get("goods_code"));
+
+
+            //退货数量和金额
+            double sellNum = getDoubleValue(item, "sell_num", 0.0);
+            double refundMoney = getDoubleValue(item, "refund_money", 0.0);
+            goodsItem.put("sell_num", -sellNum);
+            goodsItem.put("refund_money", -refundMoney);
+
+
+            // 处理餐饮商品规格
+            int isTakeout = getIntValue(item, "is_takeout", 0);
+            int isPackage = getIntValue(item, "is_package", 0);
+            if (isTakeout == 1 && isPackage == 0) {
+                int goodsId = getIntValue(item, "goods_id", 0);
+                List<Map<String, Object>> specInfo = getOrderItemSpecs(orderId, goodsId);
+                String specText = formatSpecsText(specInfo);
+                goodsItem.put("spec_text", specText);
+                goodsItem.put("is_food", true);
+            } else {
+                goodsItem.put("is_food", false);
+            }
+
+            refundGoodsArray.add(goodsItem);
+            totalRefundAmount += refundMoney;
+
+
+        }
+        printData.put("goodsItems", refundGoodsArray);
+        printData.put("totalRefundAmount", -totalRefundAmount); // 总退款金额
+
+        // 支付方式
+        int payType = getIntValue(order, "pay_type", 0);
+        printData.put("pay_type", payType);
+
+        return objectMapper.writeValueAsString(printData);
+    }
+
+
+
+    /**
+     * 手动同步指定时间范围内的已付款订单
+     */
+    public int syncPaidOrdersByTimeRange(LocalDateTime startTime, LocalDateTime endTime) {
+        log.info("手动同步已付款订单，时间范围: {} 至 {}", startTime, endTime);
+
+        // 转换为时间戳
+        long startTimestamp = startTime.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long endTimestamp = endTime.atZone(ZoneId.systemDefault()).toEpochSecond();
+
+        // 查询指定时间范围内的已付款订单
+        String sql = "SELECT * FROM tp_retail_bill_order " +
+                "WHERE pay_state = 1 AND pay_time >= ? AND pay_time <= ? " +
+                "ORDER BY id ASC";
+
+        List<Map<String, Object>> orders = jdbcTemplate.queryForList(
+                sql, startTimestamp, endTimestamp);
+
+        int syncCount = 0;
+
+        for (Map<String, Object> order : orders) {
+            int orderId = ((Number) order.get("id")).intValue();
+
+            // 检查该订单是否已经创建过打印任务
+            if (!printTaskService.isOrderExists(orderId)) {
+                try {
+                    // 创建打印任务
+                    PrintTask task = createPrintTask(order);
+                    log.info("手动同步：创建打印任务 {}", task.getTaskId());
+
+                    // 向该商户的所有客户端广播打印任务
+                    int storeId = ((Number) order.get("store_id")).intValue();
+                    notificationService.broadcastToPrintersByStore(storeId, task);
+
+                    syncCount++;
+                } catch (Exception e) {
+                    log.error("手动同步：处理订单 {} 失败", orderId, e);
+                }
+            }
+        }
+
+        log.info("手动同步已付款订单完成，共同步 {} 个订单", syncCount);
+        return syncCount;
+    }
+
+    /**
+     * 手动同步指定时间范围内的退款订单
+     */
+    public int syncRefundOrdersByTimeRange(LocalDateTime startTime, LocalDateTime endTime) {
+        log.info("手动同步退款订单，时间范围: {} 至 {}", startTime, endTime);
+
+        // 转换为时间戳
+        long startTimestamp = startTime.atZone(ZoneId.systemDefault()).toEpochSecond();
+        long endTimestamp = endTime.atZone(ZoneId.systemDefault()).toEpochSecond();
+
+        // 查询指定时间范围内的退款成功订单
+        String sql = "SELECT DISTINCT bs.bill_id, bo.* " +
+                "FROM tp_retail_bill_sell bs " +
+                "INNER JOIN tp_retail_bill_order bo ON bs.bill_id = bo.id " +
+                "WHERE bs.refund_status = 2 AND bs.scene_type = 2 " +
+                "AND bo.pay_time >= ? AND bo.pay_time <= ? " +
+                "AND NOT EXISTS (" +
+                "  SELECT 1 FROM print_tasks pt " +
+                "  WHERE pt.order_id = bs.bill_id " +
+                "  AND pt.content LIKE '%退货单%'" +
+                ") " +
+                "GROUP BY bs.bill_id " +
+                "ORDER BY bo.id ASC";
+
+        List<Map<String, Object>> refundOrders = jdbcTemplate.queryForList(
+                sql, startTimestamp, endTimestamp);
+
+        int syncCount = 0;
+
+        for (Map<String, Object> order : refundOrders) {
+            int orderId = ((Number) order.get("id")).intValue();
+
+            try {
+                // 创建退货单打印任务
+                PrintTask task = createRefundPrintTask(order);
+                log.info("手动同步：创建退货单 {}", task.getTaskId());
+
+                // 向该门店的所有客户端广播打印任务
+                int storeId = ((Number) order.get("store_id")).intValue();
+                notificationService.broadcastToPrintersByStore(storeId, task);
+
+                syncCount++;
+            } catch (Exception e) {
+                log.error("手动同步：处理退款订单 {} 失败", orderId, e);
+            }
+        }
+
+        log.info("手动同步退款订单完成，共同步 {} 个订单", syncCount);
+        return syncCount;
+    }
+
 }
