@@ -52,8 +52,21 @@ print:
       batch-size: 50
       # 同步间隔（毫秒）
       interval: 60000
+      # 同步时间限制（小时）- 只同步该时间内的订单
+      time-limit-hours: 24
     # 最后同步的订单ID
     last-sync-id: 0
+
+    # 退货单配置
+  refund:
+    # 退货单同步间隔（毫秒）
+    sync-interval: 30000
+    # 是否启用退货单打印
+    enabled: true
+    # 退货单批次大小
+    batch-size: 20
+    # 退款完成后延迟打印时间（秒）
+    print-delay: 0
 
   # 任务配置
   task:

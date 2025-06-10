@@ -582,15 +582,15 @@ public class OrderSyncService {
     @Scheduled(fixedRate = 30000)
     @Transactional
     public void syncRefundOrders() {
-
         log.info("开始同步退款成功的订单");
+
         try {
+            // 计算24小时前的时间戳
+            long twentyFourHoursAgo = System.currentTimeMillis() / 1000 - 24 * 60 * 60;
 
-            // 计算时间限制的时间戳
-            long timeLimitTimestamp = System.currentTimeMillis() / 1000 - timeLimitHours * 60 * 60;
-
-            //查询退款成功，但为生成退货单的商品。
-            //refund_state = 2(退款成功) 且 scene_type = 2(退款订单)
+            // 查询退款成功但未生成退货单的商品
+            // refund_status = 2（退款成功）且 scene_type = 2（退款订单）
+            // 且支付时间在24小时内
             String sql = "SELECT DISTINCT bs.bill_id, bo.* " +
                     "FROM tp_retail_bill_sell bs " +
                     "INNER JOIN tp_retail_bill_order bo ON bs.bill_id = bo.id " +
@@ -599,19 +599,21 @@ public class OrderSyncService {
                     "AND NOT EXISTS (" +
                     "  SELECT 1 FROM print_tasks pt " +
                     "  WHERE pt.order_id = bs.bill_id " +
-                    "  AND pt.content LIKE '%退货单%'" +
+                    "  AND pt.content LIKE '%\"type\":\"refund\"%'" +  // 匹配JSON中的type:refund
                     ") " +
                     "GROUP BY bs.bill_id " +
                     "ORDER BY bo.id ASC " +
                     "LIMIT ?";
+
             List<Map<String, Object>> refundOrders = jdbcTemplate.queryForList(
-                    sql, timeLimitTimestamp, batchSize);
+                    sql, twentyFourHoursAgo, batchSize);
+
             if (refundOrders.isEmpty()) {
-                log.info("没有新的退款成功订单需要打印（{}小时内）", timeLimitHours);
+                log.info("没有新的退款成功订单需要打印");
                 return;
             }
-            log.info("发现 {} 个退款订单需要生成退货单（{}小时内）", refundOrders.size(), timeLimitHours);
 
+            log.info("发现 {} 个退款订单需要生成退货单", refundOrders.size());
 
             for (Map<String, Object> order : refundOrders) {
                 int orderId = ((Number) order.get("id")).intValue();
@@ -629,6 +631,7 @@ public class OrderSyncService {
                     log.error("处理退款订单 {} 失败", orderId, e);
                 }
             }
+
         } catch (Exception e) {
             log.error("同步退款订单失败", e);
         }
@@ -806,7 +809,7 @@ public class OrderSyncService {
                 "AND NOT EXISTS (" +
                 "  SELECT 1 FROM print_tasks pt " +
                 "  WHERE pt.order_id = bs.bill_id " +
-                "  AND pt.content LIKE '%退货单%'" +
+                "  AND pt.content LIKE '%\"type\":\"refund\"%'" +  // 匹配JSON中的type:refund
                 ") " +
                 "GROUP BY bs.bill_id " +
                 "ORDER BY bo.id ASC";
@@ -836,6 +839,19 @@ public class OrderSyncService {
 
         log.info("手动同步退款订单完成，共同步 {} 个订单", syncCount);
         return syncCount;
+    }
+
+    /**
+     * 检查退货单是否已经创建
+     * @param orderId 订单ID
+     * @return true表示已存在退货单
+     */
+    public boolean hasRefundPrintTask(int orderId) {
+        String sql = "SELECT COUNT(*) FROM print_tasks " +
+                "WHERE order_id = ? AND content LIKE '%\"type\":\"refund\"%'";
+
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, orderId);
+        return count != null && count > 0;
     }
 
 }
